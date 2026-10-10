@@ -1,0 +1,161 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#173f35">
+<title>My Catalogue — Admin</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:#f4f6f1;color:#17231f}
+header{background:#173f35;color:white;padding:20px 16px}
+header h1{margin:0 0 6px;font-size:25px}
+header p{margin:0;opacity:.85}
+main{max-width:850px;margin:auto;padding:16px}
+.panel{background:white;border:1px solid #e0e6df;border-radius:15px;padding:16px;margin-bottom:16px}
+h2{font-size:19px;margin:0 0 15px}
+label{display:block;font-size:14px;font-weight:bold;margin-bottom:12px}
+input,textarea,select{display:block;width:100%;padding:12px;margin-top:6px;border:1px solid #d7ded7;border-radius:9px;font:inherit;background:white;color:#17231f}
+button,.link{border:0;border-radius:9px;padding:12px 15px;font-size:15px;font-weight:bold;cursor:pointer;text-decoration:none;display:inline-block}
+.primary{background:#236653;color:white}
+.secondary{background:#eaf0eb;color:#173f35}
+.danger{background:#fff0ed;color:#a32d20}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.product{border:1px solid #e0e6df;border-radius:12px;padding:12px;margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.product strong{display:block;overflow-wrap:anywhere}
+.product small{color:#6b7771;display:block;margin-top:5px}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.actions button{padding:9px;font-size:13px}
+.note{font-size:13px;color:#68756e;line-height:1.5}
+footer{text-align:center;color:#68756e;padding:22px;font-size:13px}
+@media(max-width:480px){.row{grid-template-columns:1fr}.product{grid-template-columns:1fr}.actions button{flex:1}}
+</style>
+</head>
+<body>
+<header>
+<h1>Catalogue Admin</h1>
+<p>Manage your products and prices</p>
+</header>
+<main>
+<section class="panel">
+<h2>Company settings</h2>
+<label>Company name<input id="company" placeholder="My Catalogue"></label>
+<label>Short description<input id="subtitle" placeholder="Your business products"></label>
+<label>WhatsApp number<input id="phone" placeholder="961XXXXXXXX"></label>
+<label>Currency<input id="currency" value="USD"></label>
+<button class="primary" id="saveSettings">Save company settings</button>
+</section>
+
+<section class="panel">
+<h2 id="formTitle">Add a product</h2>
+<form id="productForm">
+<input type="hidden" id="editId">
+<label>Product name<input id="name" required placeholder="e.g. Kraft bag"></label>
+<label>Category<input id="category" required placeholder="e.g. Paper bags" list="categoryOptions"><datalist id="categoryOptions"></datalist></label>
+<div class="row">
+<label>First price label<input id="label1" value="Packet" required></label>
+<label>First price<input id="price1" type="number" min="0" step="0.01" placeholder="0.00"></label>
+<label>Second price label<input id="label2" value="Box" required></label>
+<label>Second price<input id="price2" type="number" min="0" step="0.01" placeholder="0.00"></label>
+</div>
+<label>Product image URL (optional)<input id="image" type="url" placeholder="https://..."></label>
+<label>Description (optional)<textarea id="description" rows="2"></textarea></label>
+<div class="actions">
+<button class="primary" type="submit">Save product</button>
+<button class="secondary" type="button" id="cancelEdit" hidden>Cancel edit</button>
+</div>
+</form>
+</section>
+
+<section class="panel">
+<h2>Product list</h2>
+<p class="note">Edit products or change their display order. This first version saves data in this browser only.</p>
+<div class="row">
+<button class="secondary" id="exportData">Export catalogue JSON</button>
+<label class="secondary" style="text-align:center;cursor:pointer">Import JSON<input id="importData" type="file" accept=".json,application/json" style="padding:5px;margin-top:8px"></label>
+</div>
+<div id="productList"></div>
+</section>
+</main>
+<footer>My Catalogue · Admin prototype</footer>
+<script>
+const KEY="myCatalogueAdminV1";
+const initial={
+ company:{name:"My Catalogue",subtitle:"Your business products in one place",phone:"",currency:"USD"},
+ products:[
+  {id:"demo1",name:"Sample Kraft Bag",category:"Paper Bags",label1:"Packet",price1:"4.00",label2:"Box",price2:"35.00",image:"",description:""},
+  {id:"demo2",name:"Sample Food Container",category:"Food Packaging",label1:"Packet",price1:"6.00",label2:"Box",price2:"50.00",image:"",description:""}
+ ]
+};
+let data;
+try{data=JSON.parse(localStorage.getItem(KEY))||initial}catch(e){data=initial}
+const $=id=>document.getElementById(id);
+const save=()=>localStorage.setItem(KEY,JSON.stringify(data));
+const safe=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function resetForm(){
+ $("productForm").reset();$("editId").value="";$("label1").value="Packet";$("label2").value="Box";
+ $("formTitle").textContent="Add a product";$("cancelEdit").hidden=true;
+}
+function render(){
+ $("company").value=data.company.name||"";
+ $("subtitle").value=data.company.subtitle||"";
+ $("phone").value=data.company.phone||"";
+ $("currency").value=data.company.currency||"USD";
+ const cats=[...new Set(data.products.map(p=>p.category).filter(Boolean))];
+ $("categoryOptions").innerHTML=cats.map(c=>`<option value="${safe(c)}"></option>`).join("");
+ $("productList").innerHTML=data.products.map((p,i)=>`
+ <article class="product">
+  <div><strong>${safe(p.name)}</strong>
+  <small>${safe(p.category)} · ${safe(p.label1)}: ${safe(p.price1||"—")} · ${safe(p.label2)}: ${safe(p.price2||"—")}</small></div>
+  <div class="actions">
+   <button class="secondary" data-action="up" data-id="${safe(p.id)}" ${i===0?"disabled":""}>↑</button>
+   <button class="secondary" data-action="down" data-id="${safe(p.id)}" ${i===data.products.length-1?"disabled":""}>↓</button>
+   <button class="secondary" data-action="edit" data-id="${safe(p.id)}">Edit</button>
+   <button class="danger" data-action="delete" data-id="${safe(p.id)}">Delete</button>
+  </div>
+ </article>`).join("")||'<p class="note">No products yet.</p>';
+}
+$("saveSettings").addEventListener("click",()=>{
+ data.company={name:$("company").value.trim()||"My Catalogue",subtitle:$("subtitle").value.trim(),phone:$("phone").value.trim(),currency:$("currency").value.trim()||"USD"};
+ save();alert("Company settings saved in this browser.");
+});
+$("productForm").addEventListener("submit",e=>{
+ e.preventDefault();
+ const id=$("editId").value||("p"+Date.now());
+ const p={id,name:$("name").value.trim(),category:$("category").value.trim(),label1:$("label1").value.trim(),price1:$("price1").value,label2:$("label2").value.trim(),price2:$("price2").value,image:$("image").value.trim(),description:$("description").value.trim()};
+ const idx=data.products.findIndex(x=>x.id===id);
+ if(idx>=0)data.products[idx]=p;else data.products.push(p);
+ save();resetForm();render();
+});
+$("cancelEdit").addEventListener("click",resetForm);
+$("productList").addEventListener("click",e=>{
+ const b=e.target.closest("button[data-action]");if(!b)return;
+ const i=data.products.findIndex(p=>p.id===b.dataset.id);if(i<0)return;
+ const action=b.dataset.action;
+ if(action==="edit"){
+  const p=data.products[i];$("editId").value=p.id;$("name").value=p.name;$("category").value=p.category;
+  $("label1").value=p.label1;$("price1").value=p.price1;$("label2").value=p.label2;$("price2").value=p.price2;
+  $("image").value=p.image||"";$("description").value=p.description||"";
+  $("formTitle").textContent="Edit product";$("cancelEdit").hidden=false;window.scrollTo({top:0,behavior:"smooth"});
+ }else if(action==="delete"){
+  if(confirm("Delete "+data.products[i].name+"?")){data.products.splice(i,1);save();render();}
+ }else if(action==="up"&&i>0){
+  [data.products[i-1],data.products[i]]=[data.products[i],data.products[i-1]];save();render();
+ }else if(action==="down"&&i<data.products.length-1){
+  [data.products[i+1],data.products[i]]=[data.products[i],data.products[i+1]];save();render();
+ }
+});
+$("exportData").addEventListener("click",()=>{
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="my-catalogue.json";a.click();URL.revokeObjectURL(a.href);
+});
+$("importData").addEventListener("change",async e=>{
+ const f=e.target.files[0];if(!f)return;
+ try{const d=JSON.parse(await f.text());if(!d.company||!Array.isArray(d.products))throw Error();data=d;save();render();alert("Import successful.");}
+ catch{alert("Invalid catalogue JSON file.");}e.target.value="";
+});
+render();
+</script>
+</body>
+</html>
