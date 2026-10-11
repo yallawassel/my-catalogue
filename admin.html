@@ -132,6 +132,17 @@ function errorMessage(error) {
   }
   return (error && error.message) ? error.message : "An unexpected error occurred.";
 }
+function makeProductId() {
+  // The catalogue_products table requires an explicit id on new rows.
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  // UUID-format fallback for browsers without crypto.randomUUID().
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
 function cleanProduct(p) {
   return {
     name: String(p.name || "").trim(),
@@ -285,7 +296,7 @@ $("productForm").addEventListener("submit", async e => {
     if (selectedImageFile) payload.image = await uploadProductImage(selectedImageFile);
     let result;
     if(editId) result=await client.from("catalogue_products").update({...payload,updated_at:new Date().toISOString()}).eq("id",editId);
-    else result=await client.from("catalogue_products").insert(payload);
+    else result=await client.from("catalogue_products").insert({...payload,id:makeProductId(),updated_at:new Date().toISOString()});
     if(result.error) throw result.error;
     resetForm(); await loadProducts(); status(editId ? "Product updated in Supabase." : "Product saved to Supabase.");
   } catch(e) { status("Could not save product: "+errorMessage(e),true); }
@@ -339,7 +350,7 @@ $("importData").addEventListener("change",async e=>{
       const raw=d.products[i], p=cleanProduct({...raw,sort_order:Number.isFinite(Number(raw.sort_order))?Number(raw.sort_order):i});
       if(!p.name||!p.category)continue;
       const id=raw.id;
-      const result=id ? await client.from("catalogue_products").upsert({...p,id,updated_at:new Date().toISOString()}) : await client.from("catalogue_products").insert(p);
+      const result=id ? await client.from("catalogue_products").upsert({...p,id,updated_at:new Date().toISOString()}) : await client.from("catalogue_products").insert({...p,id:makeProductId(),updated_at:new Date().toISOString()});
       if(result.error)throw result.error;
     }
     await refreshAll(); status("Import completed.");
