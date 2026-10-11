@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,43 +6,41 @@
   <meta name="theme-color" content="#173f35">
   <title>My Catalogue</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-<script>
-  const SUPABASE_URL = "https://mkodburhxdrvfacytovb.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_FEJP96SGoEETQs_gaWjiqg_5LaRjyPw";
-
-  const supabaseClient = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_PUBLISHABLE_KEY
-  );
-
-  console.log("My Catalogue: Supabase client initialized.");
-</script>
-
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Arial, sans-serif; background: #f5f6f1; color: #17231f; }
     header { background: #173f35; color: white; padding: 22px 16px; }
-    header h1 { margin: 0 0 8px; }
-    header p { margin: 0; opacity: .85; }
-    main { max-width: 1000px; margin: auto; padding: 18px; }
-    input, select { width: 100%; padding: 12px; border: 1px solid #d8dfd8; border-radius: 10px; font-size: 16px; background: white; }
+    header h1 { margin: 0 0 8px; overflow-wrap: anywhere; }
+    header p { margin: 0; opacity: .9; overflow-wrap: anywhere; }
+    main { max-width: 1100px; margin: auto; padding: 18px; }
+    input, select { width: 100%; min-width: 0; padding: 12px; border: 1px solid #d8dfd8; border-radius: 10px; font-size: 16px; background: white; color: #17231f; }
     .filters { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 18px; }
     #products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-    .card { background: white; border: 1px solid #e1e6e0; border-radius: 14px; overflow: hidden; }
+    .card { background: white; border: 1px solid #e1e6e0; border-radius: 14px; overflow: hidden; min-width: 0; }
     .photo { aspect-ratio: 1; background: #e9eee8; display: grid; place-items: center; color: #537267; font-size: 26px; font-weight: bold; overflow: hidden; }
-    .photo img { width: 100%; height: 100%; object-fit: cover; }
+    .photo img { display: block; width: 100%; height: 100%; object-fit: contain; cursor: zoom-in; }
     .info { padding: 12px; }
     .info h3 { margin: 0 0 6px; font-size: 16px; overflow-wrap: anywhere; }
-    .category { color: #6b7771; font-size: 13px; margin-bottom: 10px; }
+    .category { color: #6b7771; font-size: 13px; margin-bottom: 10px; overflow-wrap: anywhere; }
     .prices { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .price { background: #f3f6f2; padding: 8px; border-radius: 8px; overflow-wrap: anywhere; }
-    .price small { display: block; color: #6b7771; font-size: 11px; }
-    #empty { color: #6b7771; text-align: center; padding: 30px; }
+    .price { background: #f3f6f2; padding: 8px; border-radius: 8px; overflow-wrap: anywhere; min-width: 0; }
+    .price small { display: block; color: #6b7771; font-size: 11px; margin-bottom: 4px; }
+    .price strong { font-size: 13px; }
+    #empty { color: #6b7771; text-align: center; padding: 30px 12px; }
     footer { text-align: center; padding: 24px; color: #6b7771; font-size: 13px; }
+    .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; padding: 18px; z-index: 10; }
+    .lightbox.open { display: flex; }
+    .lightbox img { max-width: 100%; max-height: 90vh; object-fit: contain; }
+    .lightbox button { position: absolute; top: 14px; right: 14px; border: 0; border-radius: 8px; padding: 10px 14px; font-size: 18px; }
     @media (min-width: 650px) {
       #products { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .filters { grid-template-columns: 2fr 1fr; }
+    }
+    @media (max-width: 360px) {
+      main { padding: 12px; }
+      #products { gap: 8px; }
+      .info { padding: 9px; }
+      .prices { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -55,71 +51,226 @@
   </header>
   <main>
     <div class="filters">
-      <input id="search" type="search" placeholder="Search products...">
-      <select id="category"><option value="">All categories</option></select>
+      <input id="search" type="search" placeholder="Search products..." aria-label="Search products">
+      <select id="category" aria-label="Filter by category"><option value="">All categories</option></select>
     </div>
-    <section id="products"></section>
-    <p id="empty">Welcome! Your products will appear here when the catalogue is configured.</p>
+    <section id="products" aria-live="polite"></section>
+    <p id="empty">Loading catalogue…</p>
   </main>
   <footer>My Catalogue · Business catalogue platform</footer>
+
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Product photo">
+    <button type="button" id="closeLightbox" aria-label="Close photo">✕</button>
+    <img id="lightboxImage" alt="">
+  </div>
+
   <script>
-    // Temporary preview data. Supabase connection comes next.
-    const demoProducts = [
-      { name: "Sample Kraft Bag", category: "Paper Bags", price1Label: "Packet", price1: "4.00", price2Label: "Box", price2: "35.00" },
-      { name: "Sample Food Container", category: "Food Packaging", price1Label: "Packet", price1: "6.00", price2Label: "Box", price2: "50.00" }
-    ];
+    // Use the Supabase project URL, not the /rest/v1 endpoint.
+    const SUPABASE_URL = "https://mkodburhxdrvfacytovb.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_FEJP96SGoEETQs_gaWjiqg_5LaRjyPw";
 
     const search = document.getElementById("search");
     const category = document.getElementById("category");
     const grid = document.getElementById("products");
     const empty = document.getElementById("empty");
+    const lightbox = document.getElementById("lightbox");
+    const lightboxImage = document.getElementById("lightboxImage");
 
-    [...new Set(demoProducts.map(p => p.category))].forEach(name => {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name;
-      category.appendChild(option);
-    });
+    let supabaseClient = null;
+    let products = [];
+    let currency = "USD";
+
+    function showError(message) {
+      grid.replaceChildren();
+      empty.hidden = false;
+      empty.textContent = message;
+    }
+
+    function formatPrice(value) {
+      if (value === null || value === undefined || value === "") return "—";
+      const amount = Number(value);
+      if (!Number.isFinite(amount)) return String(value);
+      return amount.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }) + " " + currency;
+    }
+
+    function setText(element, value) {
+      element.textContent = value == null ? "" : String(value);
+    }
+
+    function buildCategories() {
+      const current = category.value;
+      category.replaceChildren();
+      const all = document.createElement("option");
+      all.value = "";
+      all.textContent = "All categories";
+      category.appendChild(all);
+
+      [...new Set(products.map(p => p.category).filter(Boolean))]
+        .sort((a, b) => String(a).localeCompare(String(b)))
+        .forEach(name => {
+          const option = document.createElement("option");
+          option.value = name;
+          option.textContent = name;
+          category.appendChild(option);
+        });
+
+      if ([...category.options].some(option => option.value === current)) {
+        category.value = current;
+      }
+    }
 
     function render() {
       const term = search.value.toLowerCase().trim();
       const selected = category.value;
-      const list = demoProducts.filter(p =>
-        (!selected || p.category === selected) &&
-        (!term || (p.name + " " + p.category).toLowerCase().includes(term))
-      );
+      const list = products.filter(p => {
+        const searchable = [p.name, p.category, p.description]
+          .filter(Boolean).join(" ").toLowerCase();
+        return (!selected || p.category === selected) &&
+          (!term || searchable.includes(term));
+      });
 
-      grid.innerHTML = "";
+      grid.replaceChildren();
+
       list.forEach(p => {
         const card = document.createElement("article");
         card.className = "card";
-        const initials = p.name.split(" ").slice(0, 2).map(s => s[0]).join("");
-        card.innerHTML = `
-          <div class="photo">${initials}</div>
-          <div class="info">
-            <h3></h3>
-            <div class="category"></div>
-            <div class="prices">
-              <div class="price"><small></small><strong></strong></div>
-              <div class="price"><small></small><strong></strong></div>
-            </div>
-          </div>`;
-        card.querySelector("h3").textContent = p.name;
-        card.querySelector(".category").textContent = p.category;
-        const prices = card.querySelectorAll(".price");
-        prices[0].querySelector("small").textContent = p.price1Label;
-        prices[0].querySelector("strong").textContent = "USD " + p.price1;
-        prices[1].querySelector("small").textContent = p.price2Label;
-        prices[1].querySelector("strong").textContent = "USD " + p.price2;
+
+        const photo = document.createElement("div");
+        photo.className = "photo";
+        if (p.image) {
+          const img = document.createElement("img");
+          img.src = p.image;
+          img.alt = p.name || "Product photo";
+          img.loading = "lazy";
+          img.addEventListener("click", () => {
+            lightboxImage.src = p.image;
+            lightboxImage.alt = p.name || "Product photo";
+            lightbox.classList.add("open");
+          });
+          img.addEventListener("error", () => {
+            photo.replaceChildren();
+            photo.textContent = (p.name || "?").slice(0, 2).toUpperCase();
+          }, { once: true });
+          photo.appendChild(img);
+        } else {
+          photo.textContent = (p.name || "?").split(/\s+/).slice(0, 2)
+            .map(part => part[0] || "").join("").toUpperCase();
+        }
+
+        const info = document.createElement("div");
+        info.className = "info";
+
+        const title = document.createElement("h3");
+        setText(title, p.name || "Unnamed product");
+
+        const cat = document.createElement("div");
+        cat.className = "category";
+        setText(cat, p.category || "");
+
+        info.append(title, cat);
+
+        if (p.description) {
+          const description = document.createElement("p");
+          description.style.cssText = "font-size:13px;color:#53645c;margin:0 0 10px;overflow-wrap:anywhere";
+          setText(description, p.description);
+          info.appendChild(description);
+        }
+
+        const prices = document.createElement("div");
+        prices.className = "prices";
+
+        [[p.label1 || "Packet", p.price1], [p.label2 || "Box", p.price2]]
+          .forEach(([label, value]) => {
+            const price = document.createElement("div");
+            price.className = "price";
+            const small = document.createElement("small");
+            setText(small, label);
+            const strong = document.createElement("strong");
+            setText(strong, formatPrice(value));
+            price.append(small, strong);
+            prices.appendChild(price);
+          });
+
+        info.appendChild(prices);
+        card.append(photo, info);
         grid.appendChild(card);
       });
+
       empty.hidden = list.length > 0;
-      if (!list.length) empty.textContent = "No products found.";
+      if (!list.length) {
+        empty.textContent = products.length
+          ? "No products match your search."
+          : "No products yet. Products added by the catalogue administrator will appear here.";
+      }
+    }
+
+    async function loadCatalogue() {
+      empty.hidden = false;
+      empty.textContent = "Loading catalogue…";
+
+      try {
+        if (!window.supabase || typeof window.supabase.createClient !== "function") {
+          throw new Error("Supabase library did not load. Check your internet connection and refresh.");
+        }
+
+        supabaseClient = window.supabase.createClient(
+          SUPABASE_URL,
+          SUPABASE_PUBLISHABLE_KEY
+        );
+
+        const [productResult, settingsResult] = await Promise.all([
+          supabaseClient
+            .from("catalogue_products")
+            .select("id,name,category,description,image,label1,price1,label2,price2,sort_order")
+            .order("sort_order", { ascending: true }),
+          supabaseClient
+            .from("catalogue_settings")
+            .select("company_name,description,currency")
+            .eq("id", 1)
+            .maybeSingle()
+        ]);
+
+        if (productResult.error) throw productResult.error;
+        if (settingsResult.error) throw settingsResult.error;
+
+        products = productResult.data || [];
+
+        if (settingsResult.data) {
+          setText(document.getElementById("company"),
+            settingsResult.data.company_name || "My Catalogue");
+          setText(document.getElementById("subtitle"),
+            settingsResult.data.description || "Your business products in one place");
+          currency = settingsResult.data.currency || "USD";
+        }
+
+        buildCategories();
+        render();
+      } catch (error) {
+        console.error("My Catalogue loading error:", error);
+        showError("Could not load the catalogue. Please check the Supabase URL, publishable key, table policies, and internet connection, then refresh.");
+      }
     }
 
     search.addEventListener("input", render);
     category.addEventListener("change", render);
-    render();
+    document.getElementById("closeLightbox").addEventListener("click", () => {
+      lightbox.classList.remove("open");
+      lightboxImage.removeAttribute("src");
+    });
+    lightbox.addEventListener("click", event => {
+      if (event.target === lightbox) {
+        lightbox.classList.remove("open");
+        lightboxImage.removeAttribute("src");
+      }
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") lightbox.classList.remove("open");
+    });
+
+    loadCatalogue();
   </script>
 </body>
 </html>
