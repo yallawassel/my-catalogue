@@ -50,11 +50,10 @@ $('signOut').onclick=async()=>{await sb.auth.signOut();biz=null;products=[];awai
 $('pPhoto').addEventListener('change',()=>{if($('pPhoto').files[0])setStatus('Photo selected. It will be optimized when you save the product.')});
 function resetProduct(){$('productId').value='';$('pName').value='';$('pCategory').value='';$('pBarcode').value='';$('pPhoto').value='';$('pLabel1').value='Box';$('pPrice1').value='';$('pLabel2').value='Packet';$('pPrice2').value='';$('pDescription').value='';$('pSortOrder').value=String(products.length+1);$('productTitle').textContent='Add a product';$('saveProduct').textContent='Save product'}$('cancelProduct').onclick=resetProduct;
 async function loadProducts(){const r=await sb.from('mc_saas_products').select('*').eq('business_id',biz.id).order('sort_order').order('name');if(r.error)throw r.error;products=r.data||[];renderProducts()}
-function renderProducts(){const cats=[...new Set(products.map(p=>p.category).filter(Boolean))].sort();$('categories').innerHTML=cats.map(c=>'<option value="'+esc(c)+'"></option>').join('');const q=$('productSearch').value.toLowerCase().trim();const list=products.filter(p=>[p.name,p.category,p.barcode,p.description].join(' ').toLowerCase().includes(q));$('productList').innerHTML=list.map(p=>`<article class="item"><img src="${esc(p.image||'')}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(p.name)}</b><small>${esc(p.category)} · ${esc(p.barcode||'No barcode')}</small><small>${esc(p.label1)}: ${p.price1==null?'—':esc(p.price1)} · ${esc(p.label2)}: ${p.price2==null?'—':esc(p.price2)}</small><small>Display order: ${(Number(p.sort_order)||0)+1}</small></div><div class="itemActions"><button class="btn" data-edit="${p.id}">Edit</button><button class="btn" data-change-photo="${p.id}">Change photo</button><input type="file" accept="image/*" data-product-photo="${p.id}" style="display:none"><button class="btn danger" data-delete="${p.id}">Delete</button></div></article>`).join('')||'<p class="hint">No products yet.</p>'}
+function renderProducts(){const cats=[...new Set(products.map(p=>p.category).filter(Boolean))].sort();$('categories').innerHTML=cats.map(c=>'<option value="'+esc(c)+'"></option>').join('');const q=$('productSearch').value.toLowerCase().trim();const list=products.filter(p=>[p.name,p.category,p.barcode,p.description].join(' ').toLowerCase().includes(q));$('productList').innerHTML=list.map(p=>`<article class="item"><img src="${esc(p.image||'')}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(p.name)}</b><small>${esc(p.category)} · ${esc(p.barcode||'No barcode')}</small><small>${esc(p.label1)}: ${p.price1==null?'—':esc(p.price1)} · ${esc(p.label2)}: ${p.price2==null?'—':esc(p.price2)}</small></div><div class="itemActions"><button class="btn" data-edit="${p.id}">Edit</button><button class="btn danger" data-delete="${p.id}">Delete</button></div></article>`).join('')||'<p class="hint">No products yet.</p>'}
 $('productSearch').oninput=renderProducts;$('refreshProducts').onclick=()=>loadProducts().then(()=>setStatus('Products refreshed.')).catch(e=>setStatus(e.message,true));
 $('saveProduct').onclick=async()=>{try{const id=$('productId').value,name=$('pName').value.trim(),category=$('pCategory').value.trim();if(!name||!category)throw Error('Product name and category are required.');const p={business_id:biz.id,name,category,barcode:$('pBarcode').value.trim(),description:$('pDescription').value.trim(),label1:$('pLabel1').value.trim()||'Box',price1:parsePrice($('pPrice1').value),label2:$('pLabel2').value.trim()||'Packet',price2:parsePrice($('pPrice2').value),sort_order:Math.max(0,(Number($('pSortOrder').value)||1)-1),updated_at:new Date().toISOString()};if([p.price1,p.price2].some(v=>v!==null&&(!Number.isFinite(v)||v<0)))throw Error('Prices must be zero or greater.');const file=$('pPhoto').files[0];if(file){const optimized=await optimizeImage(file);const path=biz.id+'/'+crypto.randomUUID()+'.webp';const up=await sb.storage.from('mc-saas-images').upload(path,optimized,{upsert:false,contentType:'image/webp'});if(up.error)throw up.error;p.image=sb.storage.from('mc-saas-images').getPublicUrl(path).data.publicUrl}if(id){const old=products.find(x=>x.id===id);if(!p.image)p.image=old?.image||'';const r=await sb.from('mc_saas_products').update(p).eq('id',id).eq('business_id',biz.id);if(r.error)throw r.error}else{p.sort_order=products.length;const r=await sb.from('mc_saas_products').insert(p);if(r.error)throw r.error}resetProduct();await loadProducts();setStatus('Product saved to your business catalogue.')}catch(e){setStatus(e.message,true)}};
-$('productList').onclick=async e=>{const eb=e.target.closest('[data-edit]'),db=e.target.closest('[data-delete]'),pb=e.target.closest('[data-change-photo]');try{if(pb){const inp=$('productList').querySelector(`[data-product-photo="${pb.dataset.changePhoto}"]`);if(inp)inp.click();return}if(eb){const p=products.find(x=>x.id===eb.dataset.edit);if(!p)return;$('productId').value=p.id;$('pName').value=p.name;$('pCategory').value=p.category;$('pBarcode').value=p.barcode||'';$('pLabel1').value=p.label1||'Box';$('pPrice1').value=p.price1??'';$('pLabel2').value=p.label2||'Packet';$('pPrice2').value=p.price2??'';$('pDescription').value=p.description||'';$('pSortOrder').value=String((Number(p.sort_order)||0)+1);$('pPhoto').value='';$('productTitle').textContent='Edit product';$('saveProduct').textContent='Update product';window.scrollTo({top:0,behavior:'smooth'})}if(db&&confirm('Delete this product?')){const r=await sb.from('mc_saas_products').delete().eq('id',db.dataset.delete).eq('business_id',biz.id);if(r.error)throw r.error;await loadProducts();setStatus('Product deleted.')}}catch(e){setStatus(e.message,true)}};
-$('productList').addEventListener('change',async e=>{const inp=e.target.closest('[data-product-photo]');if(!inp||!inp.files||!inp.files[0])return;const id=inp.dataset.productPhoto;inp.disabled=true;try{const file=inp.files[0],optimized=await optimizeImage(file),path=biz.id+'/'+crypto.randomUUID()+'.webp';const up=await sb.storage.from('mc-saas-images').upload(path,optimized,{upsert:false,contentType:'image/webp'});if(up.error)throw up.error;const image=sb.storage.from('mc-saas-images').getPublicUrl(path).data.publicUrl;const r=await sb.from('mc_saas_products').update({image,updated_at:new Date().toISOString()}).eq('id',id).eq('business_id',biz.id);if(r.error)throw r.error;await loadProducts();setStatus('Product photo updated.')}catch(err){setStatus('Could not update product photo: '+err.message,true)}finally{inp.disabled=false;inp.value=''}});
+$('productList').onclick=async e=>{const eb=e.target.closest('[data-edit]'),db=e.target.closest('[data-delete]');try{if(eb){const p=products.find(x=>x.id===eb.dataset.edit);if(!p)return;$('productId').value=p.id;$('pName').value=p.name;$('pCategory').value=p.category;$('pBarcode').value=p.barcode||'';$('pLabel1').value=p.label1||'Box';$('pPrice1').value=p.price1??'';$('pLabel2').value=p.label2||'Packet';$('pPrice2').value=p.price2??'';$('pDescription').value=p.description||'';$('pSortOrder').value=String((Number(p.sort_order)||0)+1);$('pPhoto').value='';$('productTitle').textContent='Edit product';$('saveProduct').textContent='Update product';window.scrollTo({top:0,behavior:'smooth'})}if(db&&confirm('Delete this product?')){const r=await sb.from('mc_saas_products').delete().eq('id',db.dataset.delete).eq('business_id',biz.id);if(r.error)throw r.error;await loadProducts();setStatus('Product deleted.')}}catch(e){setStatus(e.message,true)}};
 $('exportJson').onclick=()=>{const data={business:{company_name:biz.company_name,description:biz.description,whatsapp:biz.whatsapp,currency:biz.currency},products};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=biz.slug+'-catalogue.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 $('importJson').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.products))throw Error('JSON must contain a products array.');if(!confirm('Import '+d.products.length+' products into '+biz.company_name+'? Existing catalogue products will not be deleted.'))return;for(const raw of d.products){const toPrice=v=>v===undefined||v===null||String(v).trim()===''?null:Number(v);const p={business_id:biz.id,name:String(raw.name||'').trim(),category:String(raw.category||'Products'),description:String(raw.description||''),image:String(raw.image||raw.photo||''),barcode:String(raw.barcode||raw.sku||''),label1:String(raw.label1||'Packet'),price1:toPrice(raw.price1??raw.price),label2:String(raw.label2||'Box'),price2:toPrice(raw.price2),sort_order:Number(raw.sort_order)||products.length,is_active:true};if(!p.name)continue;if([p.price1,p.price2].some(v=>v!==null&&!Number.isFinite(v)))throw Error('Invalid price for product '+p.name);const r=await sb.from('mc_saas_products').insert(p);if(r.error)throw r.error}await loadProducts();setStatus('JSON import finished.')}catch(err){setStatus('Import failed: '+err.message,true)}finally{e.target.value=''}};
 // Bulk Excel/CSV import with assisted photo matching. Uses the existing product schema and business-scoped storage.
@@ -63,16 +62,19 @@ const normBulk=v=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-
 const getCell=(row,aliases)=>{for(const k of Object.keys(row)){const nk=normBulk(k);if(aliases.includes(nk))return row[k]}return ''};
 const numBulk=v=>v===undefined||v===null||String(v).trim()===''?null:Number(String(v).replace(/[, ]/g,''));
 function mapBulkRow(raw,i){
- const name=String(getCell(raw,['product name','name','product','item name','item'])||'').trim();
- const category=String(getCell(raw,['category','product category','group','type'])||'Products').trim()||'Products';
- const barcode=String(getCell(raw,['barcode','sku','product code','code','item code','ean'])||'').trim();
- const label1=String(getCell(raw,['label1','unit1','unit 1','first unit','unit','packaging 1','price unit 1'])||'Box').trim()||'Box';
- const price1=numBulk(getCell(raw,['price1','price 1','first price','unit price 1','price','selling price','wholesale price']));
- const label2=String(getCell(raw,['label2','unit2','unit 2','second unit','packaging 2','price unit 2'])||'Packet').trim()||'Packet';
- const price2=numBulk(getCell(raw,['price2','price 2','second price','unit price 2','retail price']));
- const description=String(getCell(raw,['description','details','specification','specifications','size','notes'])||'').trim();
- const photoName=String(getCell(raw,['photo','image','image filename','photo filename','image file','photo file','picture'])||'').trim();
- return {rowNo:i+2,name,category,barcode,label1,price1,label2,price2,description,photoName,sortOrder:Number.isFinite(sortOrder)&&sortOrder>=0?sortOrder:i,photo:null,matchType:'',selected:true,problem:''};
+  const name=String(getCell(raw,['product name','name','product','item name','item'])||'').trim();
+  const category=String(getCell(raw,['category','product category','group','type'])||'Products').trim()||'Products';
+  const barcode=String(getCell(raw,['barcode','sku','product code','code','item code','ean'])||'').trim();
+  const label1=String(getCell(raw,['label1','unit1','unit 1','first unit','unit','packaging 1','price unit 1'])||'Box').trim()||'Box';
+  const price1=numBulk(getCell(raw,['price1','price 1','first price','unit price 1','price','selling price','wholesale price']));
+  const label2=String(getCell(raw,['label2','unit2','unit 2','second unit','packaging 2','price unit 2'])||'Packet').trim()||'Packet';
+  const price2=numBulk(getCell(raw,['price2','price 2','second price','unit price 2','retail price']));
+  const description=String(getCell(raw,['description','details','specification','specifications','size','notes'])||'').trim();
+  const sortRaw=getCell(raw,['display order','display order number','sort order','sort_order','position','order']);
+  const parsedOrder=String(sortRaw).trim()===''?i:Number(sortRaw)-1;
+  const sortOrder=Number.isFinite(parsedOrder)&&parsedOrder>=0?parsedOrder:i;
+  const photoName=String(getCell(raw,['photo','image','image filename','photo filename','image file','photo file','picture'])||'').trim();
+  return {rowNo:i+2,name,category,barcode,label1,price1,label2,price2,description,photoName,sortOrder,photo:null,matchType:'',selected:true,problem:''};
 }
 function photoScore(row,file){
  const fn=normBulk(file.name), name=normBulk(row.name), code=normBulk(row.barcode);
@@ -92,27 +94,7 @@ function autoMatchPhoto(row){
  if(ranked[0]?.score>=70){row.photo=ranked[0].file;row.matchType=ranked[0].score>=90?'Likely match':'Possible match'}
  else {row.photo=null;row.matchType='Choose photo'}
 }
-function loadXlsxReader(){
- return new Promise((resolve,reject)=>{
-  if(window.XLSX){resolve(window.XLSX);return}
-  const sources=[
-   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-   'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
-   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
-  ];
-  let index=0;
-  const tryNext=()=>{
-   if(window.XLSX){resolve(window.XLSX);return}
-   if(index>=sources.length){reject(new Error('Excel reader could not load from available CDNs. Refresh the page or save the spreadsheet as CSV and import the CSV file.'));return}
-   const script=document.createElement('script');
-   script.src=sources[index++];script.async=true;
-   script.onload=()=>window.XLSX?resolve(window.XLSX):tryNext();
-   script.onerror=tryNext;
-   document.head.appendChild(script);
-  };
-  tryNext();
- });
-}
+function loadXlsxReader(){return new Promise((resolve,reject)=>{if(window.XLSX){resolve(window.XLSX);return}const sources=['https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js','https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];let index=0;const next=()=>{if(window.XLSX){resolve(window.XLSX);return}if(index>=sources.length){reject(new Error('Excel reader could not load. Refresh the page or import a CSV file.'));return}const s=document.createElement('script');s.src=sources[index++];s.async=true;s.onload=()=>window.XLSX?resolve(window.XLSX):next();s.onerror=next;document.head.appendChild(s)};next()})}
 function setBulkSummary(message){$('bulkSummary').textContent=message}
 let photoPickerRow=-1;
 function renderBulkPreview(){
