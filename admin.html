@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#173f35"><title>My Catalogue — Business Admin</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="saas.js"></script><style>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#173f35"><title>My Catalogue — Business Admin</title><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script><script src="saas.js"></script><style>
 *{box-sizing:border-box}body{margin:0;background:#f3f6f3;color:#17231f;font:15px Arial,sans-serif}header{background:#173f35;color:#fff;padding:20px 16px}header h1{margin:0 0 5px}.wrap{max-width:1000px;margin:auto;padding:14px}.panel{background:#fff;border:1px solid #dfe7df;border-radius:15px;padding:16px;margin-bottom:14px}h2{margin:0 0 12px;font-size:19px}label{display:block;font-weight:700;font-size:13px;margin:10px 0 5px}input,textarea,select{width:100%;padding:12px;border:1px solid #ccd7ce;border-radius:9px;font:inherit;background:#fff}textarea{min-height:72px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}.btn{border:0;border-radius:9px;padding:12px 14px;font-weight:800;cursor:pointer;background:#e8eee9;color:#173f35}.primary{background:#236653;color:#fff}.danger{background:#fee2e2;color:#991b1b}.hint{font-size:13px;line-height:1.5;color:#637269}.status{margin:10px 0;padding:10px;border-radius:9px;background:#e8f3eb;white-space:pre-wrap;overflow-wrap:anywhere}.error{background:#fff0ed;color:#a32d20}.hidden{display:none!important}.item{display:grid;grid-template-columns:72px 1fr auto;gap:10px;align-items:center;border:1px solid #e1e7e2;padding:9px;border-radius:11px;margin-top:8px}.item img{width:72px;height:72px;object-fit:contain;background:#f7f8f7;border-radius:8px}.item small{display:block;color:#68756e;margin-top:5px}.item button{margin:2px}.pill{display:inline-block;background:#e8eee9;border-radius:20px;padding:5px 8px;font-size:12px}.domain{background:#f8faf8;border:1px solid #e1e7e2;padding:10px;border-radius:10px;margin-top:8px;overflow-wrap:anywhere}@media(max-width:560px){.grid{grid-template-columns:1fr}.item{grid-template-columns:58px 1fr}.item img{width:58px;height:58px}.item .itemActions{grid-column:1/-1}}
 </style></head><body><header><div style="max-width:1000px;margin:auto"><h1>My Catalogue · Business Admin</h1><div>Manage your brand, products, custom domain and catalogue.</div></div></header><main class="wrap"><div id="status" class="status" role="status">Connecting…</div>
 <section class="panel" id="authPanel"><h2>Sign in or create your account</h2><p class="hint">Create an account with your business email. If email confirmation is enabled in Supabase, confirm your email and then sign in. A business stays unpublished until the platform owner approves it.</p><div class="grid"><div><label>Email</label><input id="email" type="email" autocomplete="username" placeholder="you@company.com"></div><div><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="At least 8 characters"></div></div><div class="row"><button class="btn primary" id="signIn">Sign in</button><button class="btn" id="signUp">Create account</button></div><button class="btn" id="forgot">Send password reset email</button></section>
@@ -84,6 +84,28 @@ function autoMatchPhoto(row){
  if(ranked[0]?.score>=70){row.photo=ranked[0].file;row.matchType=ranked[0].score>=90?'Likely match':'Possible match'}
  else {row.photo=null;row.matchType='Choose photo'}
 }
+function loadXlsxReader(){
+ return new Promise((resolve,reject)=>{
+  if(window.XLSX){resolve(window.XLSX);return}
+  const sources=[
+   'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+   'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+  ];
+  let index=0;
+  const tryNext=()=>{
+   if(window.XLSX){resolve(window.XLSX);return}
+   if(index>=sources.length){reject(new Error('Excel reader could not load from available CDNs. Check your internet connection, refresh the page, or use CSV import.'));return}
+   const script=document.createElement('script');
+   script.src=sources[index++];
+   script.async=true;
+   script.onload=()=>window.XLSX?resolve(window.XLSX):tryNext();
+   script.onerror=tryNext;
+   document.head.appendChild(script);
+  };
+  tryNext();
+ });
+}
 function setBulkSummary(message){$('bulkSummary').textContent=message}
 function renderBulkPreview(){
  const rows=bulkState.rows;
@@ -100,8 +122,8 @@ $('bulkPhotos').addEventListener('change',()=>{bulkState.photos=Array.from($('bu
 $('analyzeBulk').onclick=async()=>{
  try{
   const f=$('bulkSheet').files[0];if(!f)throw Error('Choose an Excel or CSV file first.');
-  if(!window.XLSX)throw Error('Excel reader did not load. Check your internet connection and try again.');
-  const ab=await f.arrayBuffer(),wb=XLSX.read(ab,{type:'array'}),sheet=wb.Sheets[wb.SheetNames[0]],raw=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+  const XLSX=await loadXlsxReader();
+   const ab=await f.arrayBuffer(),wb=XLSX.read(ab,{type:'array'}),sheet=wb.Sheets[wb.SheetNames[0]],raw=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
   if(!raw.length)throw Error('The first sheet has no product rows.');
   bulkState.photos=Array.from($('bulkPhotos').files||[]);
   bulkState.rows=raw.map((r,i)=>mapBulkRow(r,i)).filter(r=>r.name);
