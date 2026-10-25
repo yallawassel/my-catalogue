@@ -58,7 +58,57 @@ $('productSearch').oninput=renderProducts;$('refreshProducts').onclick=()=>loadP
 $('saveProduct').onclick=async()=>{try{const id=$('productId').value,name=$('pName').value.trim(),category=$('pCategory').value.trim();if(!name||!category)throw Error('Product name and category are required.');const p={business_id:biz.id,name,category,barcode:$('pBarcode').value.trim(),description:$('pDescription').value.trim(),label1:$('pLabel1').value.trim()||'Box',price1:parsePrice($('pPrice1').value),label2:$('pLabel2').value.trim()||'Packet',price2:parsePrice($('pPrice2').value),sort_order:Math.max(0,(Number($('pSortOrder').value)||1)-1),updated_at:new Date().toISOString()};if([p.price1,p.price2].some(v=>v!==null&&(!Number.isFinite(v)||v<0)))throw Error('Prices must be zero or greater.');const file=$('pPhoto').files[0];if(file){const optimized=await optimizeImage(file);const ext=optimized.type==='image/webp'?'webp':'jpg';const path=biz.id+'/'+crypto.randomUUID()+'.'+ext;const up=await sb.storage.from('mc-saas-images').upload(path,optimized,{upsert:false,contentType:optimized.type});if(up.error)throw up.error;p.image=sb.storage.from('mc-saas-images').getPublicUrl(path).data.publicUrl}if(id){const old=products.find(x=>x.id===id);if(!p.image)p.image=old?.image||'';const r=await sb.from('mc_saas_products').update(p).eq('id',id).eq('business_id',biz.id);if(r.error)throw r.error}else{const r=await sb.from('mc_saas_products').insert(p);if(r.error)throw r.error}resetProduct();await loadProducts();setStatus('Product saved to your business catalogue.')}catch(e){setStatus(e.message,true)}};
 $('productList').onclick=async e=>{const eb=e.target.closest('[data-edit]'),db=e.target.closest('[data-delete]');try{if(eb){const p=products.find(x=>x.id===eb.dataset.edit);if(!p)return;$('productId').value=p.id;$('pName').value=p.name;$('pCategory').value=p.category;$('pBarcode').value=p.barcode||'';$('pLabel1').value=p.label1||'Box';$('pPrice1').value=p.price1??'';$('pLabel2').value=p.label2||'Packet';$('pPrice2').value=p.price2??'';$('pDescription').value=p.description||'';$('pSortOrder').value=String((Number(p.sort_order)||0)+1);$('pPhoto').value='';$('productTitle').textContent='Edit product';$('saveProduct').textContent='Update product';window.scrollTo({top:0,behavior:'smooth'})}if(db&&confirm('Delete this product?')){const r=await sb.from('mc_saas_products').delete().eq('id',db.dataset.delete).eq('business_id',biz.id);if(r.error)throw r.error;await loadProducts();setStatus('Product deleted.')}}catch(e){setStatus(e.message,true)}};
 $('exportJson').onclick=()=>{const data={business:{company_name:biz.company_name,description:biz.description,whatsapp:biz.whatsapp,currency:biz.currency},products};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download=biz.slug+'-catalogue.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
-$('importJson').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!Array.isArray(d.products))throw Error('JSON must contain a products array.');if(!confirm('Import '+d.products.length+' products into '+biz.company_name+'? Existing catalogue products will not be deleted.'))return;for(const raw of d.products){const toPrice=v=>v===undefined||v===null||String(v).trim()===''?null:Number(v);const p={business_id:biz.id,name:String(raw.name||'').trim(),category:String(raw.category||'Products'),description:String(raw.description||''),image:String(raw.image||raw.photo||''),barcode:String(raw.barcode||raw.sku||''),label1:String(raw.label1||'Packet'),price1:toPrice(raw.price1??raw.price),label2:String(raw.label2||'Box'),price2:toPrice(raw.price2),sort_order:Number(raw.sort_order)||products.length,is_active:true};if(!p.name)continue;if([p.price1,p.price2].some(v=>v!==null&&!Number.isFinite(v)))throw Error('Invalid price for product '+p.name);const r=await sb.from('mc_saas_products').insert(p);if(r.error)throw r.error}await loadProducts();setStatus('JSON import finished.')}catch(err){setStatus('Import failed: '+err.message,true)}finally{e.target.value=''}};
+// Import compatible with both My Catalogue JSON and the working White Pack products.json format.
+async function uploadImportedPhoto(value, productName){
+ if(!value || typeof value!=='string') return '';
+ if(!value.startsWith('data:image/')) return value; // Keep existing public URLs unchanged.
+ const match=value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]*)$/);
+ if(!match) throw new Error('Invalid embedded photo for '+productName);
+ const mime=match[1], raw=atob(match[2]), bytes=new Uint8Array(raw.length);
+ for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i);
+ const original=new File([bytes],productName.replace(/[^a-z0-9_-]+/gi,'-')+'.'+(mime.includes('webp')?'webp':mime.includes('png')?'png':'jpg'),{type:mime});
+ const optimized=await optimizeImage(original);
+ const ext=optimized.type==='image/webp'?'webp':'jpg', path=biz.id+'/'+crypto.randomUUID()+'.'+ext;
+ const up=await sb.storage.from('mc-saas-images').upload(path,optimized,{upsert:false,contentType:optimized.type});
+ if(up.error) throw new Error('Photo upload failed for '+productName+': '+up.error.message);
+ return sb.storage.from('mc-saas-images').getPublicUrl(path).data.publicUrl;
+}
+$('importJson').onchange=async e=>{
+ const f=e.target.files[0];if(!f)return;
+ try{
+  if(!f.size)throw Error('The selected JSON file is empty (0 KB). Choose the original products.json file.');
+  const d=JSON.parse(await f.text());
+  if(!Array.isArray(d.products))throw Error('JSON must contain a products array.');
+  const clean=v=>String(v??'').trim();
+  const norm=v=>clean(v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+  const toPrice=v=>v===undefined||v===null||clean(v)===''?null:Number(clean(v).replace(/[$, ]/g,''));
+  const knownNames=new Set(products.map(p=>norm(p.name))), knownCodes=new Set(products.map(p=>norm(p.barcode)).filter(Boolean));
+  const rows=[], inFileNames=new Set(), inFileCodes=new Set();let duplicates=0;
+  for(const raw of d.products){
+   const name=clean(raw.name||raw.product_name||raw.title);if(!name)continue;
+   const barcode=clean(raw.barcode||raw.sku||raw.productCode||raw.code), n=norm(name), c=norm(barcode);
+   if(knownNames.has(n)||(c&&knownCodes.has(c))||(inFileNames.has(n))||(c&&inFileCodes.has(c))){duplicates++;continue}
+   inFileNames.add(n);if(c)inFileCodes.add(c);
+   const p1=toPrice(raw.price1??raw.price??raw.price_1),p2=toPrice(raw.price2??raw.price_2);
+   if([p1,p2].some(v=>v!==null&&(!Number.isFinite(v)||v<0)))throw Error('Invalid price for product '+name);
+   rows.push({raw,name,barcode,category:clean(raw.category||raw.group||'Products')||'Products',description:clean(raw.description||raw.details),label1:clean(raw.price1Label||raw.label1||raw.unit1||'Box')||'Box',price1:p1,label2:clean(raw.price2Label||raw.label2||raw.unit2||'Packet')||'Packet',price2:p2,photo:raw.image||raw.photo||raw.image_url||'',sort_order:rows.length});
+  }
+  if(!rows.length)throw Error('No new products to import. '+duplicates+' duplicate(s) were found by product name or barcode.');
+  if(!confirm('Import '+rows.length+' new product(s) into '+biz.company_name+'? '+duplicates+' duplicate(s) will be skipped. Existing products will not be deleted. Embedded photos will be optimized and uploaded to this business storage.'))return;
+  let saved=0,failed=0,photos=0;const errors=[];
+  for(let i=0;i<rows.length;i++){
+   const r=rows[i];
+   try{
+    let image='';if(r.photo){image=await uploadImportedPhoto(String(r.photo),r.name);if(image)photos++}
+    const p={business_id:biz.id,name:r.name,category:r.category,description:r.description,image,barcode:r.barcode,label1:r.label1,price1:r.price1,label2:r.label2,price2:r.price2,sort_order:r.sort_order,is_active:true,updated_at:new Date().toISOString()};
+    const ins=await sb.from('mc_saas_products').insert(p);if(ins.error)throw ins.error;
+    saved++;if(r.barcode)knownCodes.add(norm(r.barcode));knownNames.add(norm(r.name));
+    setStatus('Importing '+(i+1)+'/'+rows.length+': '+r.name+' · '+saved+' saved, '+failed+' failed');
+   }catch(err){failed++;errors.push(r.name+': '+err.message)}
+  }
+  await loadProducts();setStatus('JSON import finished: '+saved+' saved, '+failed+' failed, '+photos+' embedded photo(s) uploaded. '+duplicates+' duplicate(s) skipped.'+(errors.length?' First error: '+errors[0]:''),failed>0);
+ }catch(err){setStatus('Import failed: '+err.message,true)}finally{e.target.value=''}
+};
 // Bulk Excel/CSV import with assisted photo matching. Uses the existing product schema and business-scoped storage.
 const bulkState={rows:[],photos:[],analyzed:false,busy:false};
 const normBulk=v=>String(v??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\.(jpe?g|png|webp|gif|bmp|heic|heif)$/i,'').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
