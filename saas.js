@@ -31,9 +31,11 @@
     const scale=Math.min(1,maxSize/Math.max(img.naturalWidth,img.naturalHeight));
     const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
     const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
-    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
+    let blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/webp',quality));
+    let ext='webp',mime='image/webp';
+    if(!blob||blob.type!=='image/webp'){blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',Math.min(.9,quality)));ext='jpg';mime='image/jpeg'}
     if (!blob) throw new Error('Image optimization failed in this browser.');
-    return new File([blob],(file.name.replace(/\.[^.]+$/,'')||'photo')+'.webp',{type:'image/webp'});
+    return new File([blob],(file.name.replace(/\.[^.]+$/,'')||'photo')+'.'+ext,{type:mime});
   }
   window.MC = { sb, esc, slugify, resolveBusiness, optimizeImage, money:(n,c='USD') => (c==='LBP'?'LBP ':'$')+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2}) };
 })();
