@@ -1,42 +1,14 @@
-MY CATALOGUE SAAS — PATCHED DEPLOYMENT PACKAGE
+MY CATALOGUE SAAS — CORRECTED FILE PACKAGE
 
-This package preserves the existing My Catalogue multi-business SaaS and uses the My Catalogue Supabase project. It does not replace or modify the separate White Pack site.
+Corrections in this package:
+1. Admin product list now supports editing name, category, barcode/SKU, units, prices, description and display order directly in the product row, with a Save this row button.
+2. Product photos can be changed directly from each row; uploaded images are optimized and saved to the business image bucket.
+3. Public catalogue category and product photos use square image areas with object-fit: contain so the full product is visible instead of being cropped.
+4. JSON and spreadsheet import workflows skip products that match an existing normalized name or barcode/SKU, and skip repeated rows in an import, to prevent creating more duplicates.
+5. Added Review duplicates in the admin Products section. Review the displayed groups carefully and delete only extra records you are certain you do not need. Deleting is permanent.
+6. Existing ordering features and business-scoped Supabase data access were retained.
 
-Included files are named for direct upload:
-- admin.html
-- index.html (patched)
-- saas.js
-- orders.html
-- driver-tracking.html
-- platform-admin.html
-- manifest.webmanifest
-- icon-192.png
-- icon-512.png
-- products.json (unchanged source/import backup)
-- PLATFORM_ADMIN_GUIDE.sql
-- README_PATCHED.txt
+VALIDATION: JavaScript syntax checks passed for the inline scripts in admin.html, index.html, orders.html, driver-tracking.html, platform-admin.html, and saas.js.
+LIMITATION: This package was syntax-checked but could not be live-tested against your Supabase project from this environment. After uploading, test with one product before bulk changes.
 
-Changes in index.html:
-1. Blank/null prices are treated as unpriced, not as zero-priced products.
-2. WhatsApp checkout opens a temporary tab immediately on the customer's tap, before awaiting the Supabase save. This helps prevent mobile popup blocking.
-3. If the Supabase order save fails, the WhatsApp message can still be sent, and the status message explains the online save failure.
-
-Deployment:
-1. Download and extract this ZIP.
-2. Upload all files to the SAME directory in your My Catalogue GitHub repository, replacing the existing files with the same names.
-3. Keep saas.js beside all HTML pages. Keep manifest.webmanifest and both icon PNGs beside index.html.
-4. Do not copy these files over the separate White Pack site.
-5. Public catalogues use index.html?shop=YOUR-BUSINESS-SLUG unless a verified custom domain is configured.
-6. A business must be approved/published by the platform owner before its public catalogue is visible.
-
-Validation:
-The inline JavaScript in admin.html, index.html, orders.html, driver-tracking.html, and platform-admin.html passed Node's syntax checker after the patch. This does not prove live Supabase policies, OAuth provider configuration, or GitHub Pages settings are correct; those require testing on the deployed site.
-
-Suggested test order:
-- Sign in to admin
-- Add/edit one test product
-- Import a small JSON file
-- Preview the business catalogue using its ?shop=slug link
-- Add a product to cart and send a test WhatsApp order
-- Confirm the order appears in orders.html
-- Test driver sign-in and location sharing
+DEPLOYMENT: Back up the current GitHub files. Replace the matching files in the my-catalogue repository, keeping filenames and folder structure unchanged. Keep White Pack separate.
