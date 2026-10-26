@@ -1,0 +1,32 @@
+MY CATALOGUE / WHITE PACK IMPORT AUDIT
+
+Products in supplied products.json: 291
+Categories represented: 24
+Duplicate-name groups: 11
+Extra records across those groups: 14
+Rows with no price in either unit: 10
+
+IMPORTANT: No product records were deleted or prices/photos changed.
+The duplicate-name groups have different prices and/or photos in several cases, so they need a human decision before deleting any records.
+
+Likely category-cover rows with no prices:
+- JSON row 42: Cleaning & Household Supplies [Cleaning & Household Supplies]
+- JSON row 44: Toilet And Facial Tissues [Paper Rolls&Facial Tissues]
+- JSON row 45: Plastic Food Hinged Containers [Plastic Food Containers]
+- JSON row 47: Paper & Krafted Bags [Paper Bags]
+- JSON row 66: Round Krafted Bowl [Kraft Containers & Trays]
+- JSON row 134: Cleaner [Cleaner]
+- JSON row 213: Shisha Supplies [Shisha Supplies]
+- JSON row 220: Straws [Straws]
+- JSON row 240: Fuel Gel [Fuel Gel]
+- JSON row 241: Sushi Boats [Sushi Supplies]
+
+Main code issue corrected in index.html:
+The category cover image is selected as the first no-price product in a category, but the old product-list filter hid a no-price item only if it was the very first product in the category. If the cover item was later in the list, it could appear inside the category as a non-orderable product. The fix hides the same no-price item used as the category cover while keeping its image on the category card.
+
+Catalogue open/admin checklist:
+1. Keep index.html, admin.html, saas.js, manifest.webmanifest, icon-192.png and icon-512.png in the same deployed folder/repository, using these exact filenames.
+2. My Catalogue HTML files use the My Catalogue Supabase project (mkodburhxdrvfacytovb), not White Pack project tables.
+3. A public catalogue URL needs ?shop=YOUR-BUSINESS-SLUG and that business must be published in mc_saas_businesses.
+4. Do not use a file:/// URL as the final live test. Test through GitHub Pages/HTTPS so the relative saas.js script and auth redirects work as deployed.
+5. The admin JSON importer skips products matching an existing normalized name or barcode and also skips repeated names within the same file. The supplied file has repeated names with different prices/photos; review the CSV before importing/deleting anything.
